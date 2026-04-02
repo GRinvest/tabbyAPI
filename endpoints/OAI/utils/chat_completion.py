@@ -183,6 +183,7 @@ def _create_stream_chunk(
     model_name: Optional[str] = None,
     is_usage_chunk: bool = False,
     is_reasoning_chunk: bool = False,
+    tool_call_format: str = "json",
 ):
     """Create a chat completion stream chunk from the provided text."""
 
@@ -213,9 +214,8 @@ def _create_stream_chunk(
         # Mark finish_reason as tool_calls since this is the last chunk
         if "tool_calls" in generation:
             tool_calls = generation["tool_calls"]
-            message = ChatCompletionMessage(
-                tool_calls=ToolCallProcessor.from_json(tool_calls)
-            )
+            parsed = ToolCallProcessor.parse(tool_calls, format=tool_call_format)
+            message = ChatCompletionMessage(role="assistant", tool_calls=parsed)
             choice.delta = message
             choice.finish_reason = "tool_calls"
 
@@ -394,6 +394,7 @@ async def stream_generate_chat_completion(
     gen_queue = asyncio.Queue()
     gen_tasks: List[asyncio.Task] = []
     tool_start = model.container.prompt_template.metadata.tool_start
+    tool_call_format = model.container.prompt_template.metadata.tool_call_format
     disconnect_task = asyncio.create_task(request_disconnect_loop(request))
 
     try:
@@ -470,6 +471,7 @@ async def stream_generate_chat_completion(
                 generation,
                 model_path.name,
                 is_reasoning_chunk=is_reasoning_chunk,
+                tool_call_format=tool_call_format,
             )
             yield response.model_dump_json()
 
@@ -482,6 +484,7 @@ async def stream_generate_chat_completion(
                         generation,
                         model_path.name,
                         is_usage_chunk=True,
+                        tool_call_format=tool_call_format,
                     )
                     yield usage_chunk.model_dump_json()
 
